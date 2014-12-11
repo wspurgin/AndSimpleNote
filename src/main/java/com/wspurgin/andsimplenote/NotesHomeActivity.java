@@ -7,6 +7,7 @@ import android.app.Fragment;
 import android.app.FragmentManager;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.os.Build;
 import android.os.Bundle;
 import android.util.Log;
@@ -20,6 +21,7 @@ import android.support.v4.widget.DrawerLayout;
 import android.widget.ArrayAdapter;
 import android.widget.TextView;
 
+import com.evernote.client.android.AuthenticationResult;
 import com.evernote.client.android.EvernoteSession;
 
 import java.util.ArrayList;
@@ -56,7 +58,9 @@ public class NotesHomeActivity extends Activity
 
         mEvernoteSession = EvernoteSession.getInstance(this, EvernoteConsts.getConsumerKey(),
                 EvernoteConsts.getConsumerSecret(), EvernoteConsts.getEvernoteService());
-        mEvernoteSession.authenticate(this);
+        if (!mEvernoteSession.isLoggedIn())
+            mEvernoteSession.authenticate(this);
+
         DUMMY_NOTES.add(new SimpleNote("Dummy Note 1", "blah blah blah blah"));
         DUMMY_NOTES.add(new SimpleNote("Dummy Note 2", "blah test blah"));
         DUMMY_NOTES.add(new SimpleNote("Dummy Note 3", "Text dad"));
