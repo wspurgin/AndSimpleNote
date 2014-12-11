@@ -22,6 +22,8 @@ import android.widget.TextView;
 
 import com.evernote.client.android.EvernoteSession;
 
+import java.util.ArrayList;
+
 
 public class NotesHomeActivity extends Activity
         implements NavigationDrawerFragment.NavigationDrawerCallbacks {
@@ -30,6 +32,8 @@ public class NotesHomeActivity extends Activity
      * Fragment managing the behaviors, interactions and presentation of the navigation drawer.
      */
     private NavigationDrawerFragment mNavigationDrawerFragment;
+
+    private ArrayList<SimpleNote> DUMMY_NOTES;
 
     private EvernoteSession mEvernoteSession;
 
@@ -44,18 +48,24 @@ public class NotesHomeActivity extends Activity
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_notes_home);
+        DUMMY_NOTES = new ArrayList<SimpleNote>();
 
         mNavigationDrawerFragment = (NavigationDrawerFragment)
                 getFragmentManager().findFragmentById(R.id.navigation_drawer);
         mTitle = getTitle();
 
-        // Set up the drawer.
-        mNavigationDrawerFragment.setUp(
-                R.id.navigation_drawer,
-                (DrawerLayout) findViewById(R.id.drawer_layout));
         mEvernoteSession = EvernoteSession.getInstance(this, EvernoteConsts.getConsumerKey(),
                 EvernoteConsts.getConsumerSecret(), EvernoteConsts.getEvernoteService());
         mEvernoteSession.authenticate(this);
+        DUMMY_NOTES.add(new SimpleNote("Dummy Note 1", "blah blah blah blah"));
+        DUMMY_NOTES.add(new SimpleNote("Dummy Note 2", "blah test blah"));
+        DUMMY_NOTES.add(new SimpleNote("Dummy Note 3", "Text dad"));
+
+        // Set up the drawer.
+        mNavigationDrawerFragment.setUp(
+                R.id.navigation_drawer,
+                (DrawerLayout) findViewById(R.id.drawer_layout),
+                DUMMY_NOTES);
     }
 
     @Override
@@ -68,17 +78,7 @@ public class NotesHomeActivity extends Activity
     }
 
     public void onSectionAttached(int number) {
-        switch (number) {
-            case 1:
-                mTitle = getString(R.string.title_section1);
-                break;
-            case 2:
-                mTitle = getString(R.string.title_section2);
-                break;
-            case 3:
-                mTitle = getString(R.string.title_section3);
-                break;
-        }
+        mTitle = DUMMY_NOTES.get(number-1).getTitle();
     }
 
     public void restoreActionBar() {
@@ -159,8 +159,7 @@ public class NotesHomeActivity extends Activity
         @Override
         public View onCreateView(LayoutInflater inflater, ViewGroup container,
                                  Bundle savedInstanceState) {
-            View rootView = inflater.inflate(R.layout.fragment_notes_home, container, false);
-            return rootView;
+            return inflater.inflate(R.layout.fragment_notes_home, container, false);
         }
 
         @Override
