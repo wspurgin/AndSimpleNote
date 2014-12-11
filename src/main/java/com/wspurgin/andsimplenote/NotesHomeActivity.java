@@ -6,8 +6,10 @@ import android.app.ActionBar;
 import android.app.Fragment;
 import android.app.FragmentManager;
 import android.content.Context;
+import android.content.Intent;
 import android.os.Build;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.Menu;
@@ -18,6 +20,8 @@ import android.support.v4.widget.DrawerLayout;
 import android.widget.ArrayAdapter;
 import android.widget.TextView;
 
+import com.evernote.client.android.EvernoteSession;
+
 
 public class NotesHomeActivity extends Activity
         implements NavigationDrawerFragment.NavigationDrawerCallbacks {
@@ -26,6 +30,10 @@ public class NotesHomeActivity extends Activity
      * Fragment managing the behaviors, interactions and presentation of the navigation drawer.
      */
     private NavigationDrawerFragment mNavigationDrawerFragment;
+
+    private EvernoteSession mEvernoteSession;
+
+    private static final String LOGTAG = "ASN-NotesHome";
 
     /**
      * Used to store the last screen title. For use in {@link #restoreActionBar()}.
@@ -45,6 +53,9 @@ public class NotesHomeActivity extends Activity
         mNavigationDrawerFragment.setUp(
                 R.id.navigation_drawer,
                 (DrawerLayout) findViewById(R.id.drawer_layout));
+        mEvernoteSession = EvernoteSession.getInstance(this, EvernoteConsts.getConsumerKey(),
+                EvernoteConsts.getConsumerSecret(), EvernoteConsts.getEvernoteService());
+        mEvernoteSession.authenticate(this);
     }
 
     @Override
@@ -104,6 +115,20 @@ public class NotesHomeActivity extends Activity
         }
 
         return super.onOptionsItemSelected(item);
+    }
+
+    @Override
+    public void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        switch(requestCode) {
+            // Update UI when oauth activity returns result
+            case EvernoteSession.REQUEST_CODE_OAUTH:
+                if (resultCode == Activity.RESULT_OK) {
+                    // Authentication was successful, do what you need to do in your app
+                    Log.i(LOGTAG, "Authenticated with Evernote");
+                }
+                break;
+        }
     }
 
     /**
