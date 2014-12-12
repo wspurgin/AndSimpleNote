@@ -23,7 +23,19 @@ import android.widget.ArrayAdapter;
 import android.widget.ListView;
 import android.widget.Toast;
 
+import com.evernote.client.android.AsyncNoteStoreClient;
+import com.evernote.client.android.EvernoteSession;
+import com.evernote.client.android.OnClientCallback;
+import com.evernote.edam.limits.Constants;
+import com.evernote.edam.notestore.NoteFilter;
+import com.evernote.edam.notestore.NoteList;
+import com.evernote.edam.notestore.NoteMetadata;
+import com.evernote.edam.notestore.NotesMetadataList;
+import com.evernote.edam.notestore.NotesMetadataResultSpec;
+import com.evernote.edam.type.Note;
+
 import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Fragment used for managing interactions for and presentation of a navigation drawer.
@@ -45,6 +57,9 @@ public class NavigationDrawerFragment extends Fragment {
 
     private static final String LOGTAG = "ASN-NavigationFrag";
 
+    private AsyncNoteStoreClient mNoteStoreClient;
+    private ArrayAdapter<SimpleNote> mAdapter;
+
     /**
      * A pointer to the current callbacks instance (the Activity).
      */
@@ -54,8 +69,6 @@ public class NavigationDrawerFragment extends Fragment {
      * Helper component that ties the action bar to the navigation drawer.
      */
     private ActionBarDrawerToggle mDrawerToggle;
-
-    private ArrayList<SimpleNote> mNotes;
 
     private DrawerLayout mDrawerLayout;
     private ListView mDrawerListView;
@@ -71,11 +84,17 @@ public class NavigationDrawerFragment extends Fragment {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-
         // Read in the flag indicating whether or not the user has demonstrated awareness of the
         // drawer. See PREF_USER_LEARNED_DRAWER for details.
         SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(getActivity());
         mUserLearnedDrawer = sp.getBoolean(PREF_USER_LEARNED_DRAWER, false);
+
+        mAdapter = new ArrayAdapter<SimpleNote>(
+                getActionBar().getThemedContext(),
+                android.R.layout.simple_list_item_activated_1,
+                android.R.id.text1,
+                new ArrayList<SimpleNote>());
+        mAdapter.setNotifyOnChange(true);
 
         if (savedInstanceState != null) {
             mCurrentSelectedPosition = savedInstanceState.getInt(STATE_SELECTED_POSITION);
@@ -83,7 +102,8 @@ public class NavigationDrawerFragment extends Fragment {
         }
 
         // Select either the default item (0) or the last selected item.
-        selectItem(mCurrentSelectedPosition);
+//        selectItem(mCurrentSelectedPosition);
+        mCurrentSelectedPosition = -1;
     }
 
     @Override
@@ -119,18 +139,17 @@ public class NavigationDrawerFragment extends Fragment {
      * @param fragmentId   The android:id of this fragment in its activity's layout.
      * @param drawerLayout The DrawerLayout containing this fragment's UI.
      */
-    public void setUp(int fragmentId, DrawerLayout drawerLayout, ArrayList<SimpleNote> notes) {
+    public void setUp(int fragmentId, DrawerLayout drawerLayout,
+                      AsyncNoteStoreClient noteStoreClient, String notebookGUID) {
+        Log.i(LOGTAG, "Setting up navigation fragment");
         mFragmentContainerView = getActivity().findViewById(fragmentId);
         mDrawerLayout = drawerLayout;
-        mNotes = notes;
+        mNoteStoreClient = noteStoreClient;
 
         // set list view
-        mDrawerListView.setAdapter(new ArrayAdapter<SimpleNote>(
-                getActionBar().getThemedContext(),
-                android.R.layout.simple_list_item_activated_1,
-                android.R.id.text1,
-                mNotes
-        ));
+        mDrawerListView.setAdapter(mAdapter);
+
+        this.retrieveData(notebookGUID);
 
         // set a custom shadow that overlays the main content when the drawer opens
         mDrawerLayout.setDrawerShadow(R.drawable.drawer_shadow, GravityCompat.START);
@@ -286,5 +305,86 @@ public class NavigationDrawerFragment extends Fragment {
          * Called when an item in the navigation drawer is selected.
          */
         void onNavigationDrawerItemSelected(int position);
+    }
+
+    public void retrieveData(final String notebookGUID) {
+        Log.i(LOGTAG, "Attempting to retrieve data");
+        NoteFilter filter = new NoteFilter();
+        filter.setNotebookGuid(notebookGUID);
+        NotesMetadataResultSpec spec = new NotesMetadataResultSpec();
+        spec.unsetIncludeContentLength();
+        spec.unsetIncludeAttributes();
+        spec.unsetIncludeLargestResourceMime();
+        spec.unsetIncludeLargestResourceSize();
+        spec.unsetIncludeNotebookGuid();
+        spec.unsetIncludeTagGuids();
+        spec.unsetIncludeUpdated();
+        spec.unsetIncludeCreated();
+        spec.unsetIncludeUpdateSequenceNum();
+        mNoteStoreClient.findNotesMetadata(filter,
+                0,
+                Constants.EDAM_USER_NOTES_MAX,
+                spec,
+                new OnClientCallback<NotesMetadataList>() {
+                    @Override
+                    public void onSuccess(NotesMetadataList data) {
+                        Log.i(LOGTAG, "Notes retrieved from Evernote");
+                        if (data.getNotesSize() > 0) {
+                            Log.i(LOGTAG, String.format("Retrieved %d notes", data.getNotesSize()));
+                            List<NoteMetadata> notes = data.getNotes();
+                            for (NoteMetadata note : notes) {
+                                Log.i(LOGTAG, note.toString());
+                                // make call for content
+                                mNoteStoreClient.getNote(note.getGuid(), true, false, false, false, new OnClientCallback<Note>() {
+                                    @Override
+                                    public void onSuccess(Note data) {
+                                        mAdapter.add(NoteConverter.toSimpleNote(data));
+                                        if (mCurrentSelectedPosition == -1) {
+                                            // select the first item (by default)
+                                            selectItem(0);
+                                        }
+                                    }
+
+                                    @Override
+                                    public void onException(Exception exception) {
+                                        Log.i(LOGTAG, exception.getMessage(), exception);
+                                    }
+                                });
+                            }
+                        } else {
+                            Log.i(LOGTAG, "Adding default note");
+                            // Add the first note and have it created in the background.
+                            SimpleNote note = new SimpleNote("Notes", "contents");
+                            mAdapter.add(note);
+
+                            // send the note to Evernote
+                            Note everNote = NoteConverter.toEverNote(note);
+                            everNote.setNotebookGuid(notebookGUID);
+                            mNoteStoreClient.createNote(everNote, new OnClientCallback<Note>() {
+                                @Override
+                                public void onSuccess(Note data) {
+                                    Log.i(LOGTAG, "created first note");
+                                }
+
+                                @Override
+                                public void onException(Exception exception) {
+                                    Log.i(LOGTAG, exception.getMessage(), exception);
+                                }
+                            });
+                            // select the first item (by default)
+                            selectItem(0);
+                        }
+                    }
+
+                    @Override
+                    public void onException(Exception exception) {
+                        Log.i(LOGTAG, exception.getMessage(), exception);
+                    }
+                });
+    }
+
+    public SimpleNote getNote(int position) {
+        Log.i(LOGTAG, String.valueOf(position));
+        return mAdapter.getItem(position);
     }
 }

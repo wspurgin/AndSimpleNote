@@ -1,5 +1,7 @@
 package com.wspurgin.andsimplenote;
 
+import com.evernote.edam.type.Note;
+
 import java.io.Serializable;
 
 /**
@@ -11,6 +13,15 @@ public class SimpleNote implements Serializable {
     private String mBody;
 
     public SimpleNote() {}
+
+    public SimpleNote(SimpleNote other) {
+        mTitle = other.getTitle();
+        mBody = other.getBody();
+    }
+
+    public SimpleNote(Note note) {
+        this(NoteConverter.toSimpleNote(note));
+    }
 
     public SimpleNote(String title, String body) {
         mTitle = title;

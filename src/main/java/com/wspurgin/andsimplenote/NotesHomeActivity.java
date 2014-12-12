@@ -5,9 +5,11 @@ import android.app.Activity;
 import android.app.ActionBar;
 import android.app.Fragment;
 import android.app.FragmentManager;
+import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.os.Bundle;
+import android.util.AttributeSet;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.Menu;
@@ -20,6 +22,11 @@ import com.evernote.client.android.AsyncNoteStoreClient;
 import com.evernote.client.android.ClientFactory;
 import com.evernote.client.android.EvernoteSession;
 import com.evernote.client.android.OnClientCallback;
+import com.evernote.edam.limits.Constants;
+import com.evernote.edam.notestore.NoteFilter;
+import com.evernote.edam.notestore.NoteList;
+import com.evernote.edam.notestore.NotesMetadataResultSpec;
+import com.evernote.edam.type.Note;
 import com.evernote.edam.type.Notebook;
 import com.evernote.thrift.transport.TTransportException;
 
@@ -38,6 +45,8 @@ public class NotesHomeActivity extends Activity
     private ArrayList<SimpleNote> mNotes;
 
     private EvernoteSession mEvernoteSession;
+
+    AsyncNoteStoreClient mNoteStoreClient;
 
     private static final String LOGTAG = "ASN-NotesHome";
 
@@ -62,20 +71,23 @@ public class NotesHomeActivity extends Activity
         if (!mEvernoteSession.isLoggedIn()) {
             mEvernoteSession.authenticate(this);
         }
+        // After data has been retrieved, set up activity
+        setContentView(R.layout.activity_notes_home);
+        Log.i(LOGTAG, "Content view has been set");
         ClientFactory clientFactory = mEvernoteSession.getClientFactory();
-        AsyncNoteStoreClient noteStoreClient;
         try {
-            noteStoreClient = clientFactory.createNoteStoreClient();
+            mNoteStoreClient = clientFactory.createNoteStoreClient();
+            final Notebook notebook = new Notebook();
+            notebook.setName(NOTE_BOOK_NAME);
             if (!preferences.contains(PREF_GUID)) {
-                final Notebook notebook = new Notebook();
-                notebook.setName(NOTE_BOOK_NAME);
-                noteStoreClient.createNotebook(notebook, new OnClientCallback<Notebook>() {
+                Log.i(LOGTAG, "Notebook GUID not in preferences, attempting to create");
+                mNoteStoreClient.createNotebook(notebook, new OnClientCallback<Notebook>() {
                     @Override
                     public void onSuccess(Notebook data) {
                         preferences.edit().putString(PREF_GUID, data.getGuid()).apply();
                         notebook.setGuid(data.getGuid());
                         Log.i(LOGTAG, notebook.toString());
-                        setUpView(notebook.getGuid());
+                        setUpNavigation(notebook.getGuid());
                     }
 
                     @Override
@@ -84,7 +96,8 @@ public class NotesHomeActivity extends Activity
                     }
                 });
             } else {
-                setUpView(preferences.getString(PREF_GUID, ""));
+                Log.i(LOGTAG, "Notebook GUID detected in preferences");
+                setUpNavigation(preferences.getString(PREF_GUID, ""));
             }
 
         } catch (TTransportException e) {
@@ -93,31 +106,32 @@ public class NotesHomeActivity extends Activity
     }
 
     @Override
+    public void onStart() {
+        super.onStart();
+    }
+
+    @Override
     public void onNavigationDrawerItemSelected(int position) {
         // update the main content by replacing fragments
         FragmentManager fragmentManager = getFragmentManager();
+        Log.i(LOGTAG, String.valueOf(position));
+        if (mNavigationDrawerFragment == null)
+            Log.w(LOGTAG, "navigation fragment is null");
+        SimpleNote note = mNavigationDrawerFragment.getNote(position);
+        mTitle = note.getTitle();
+        Log.i(LOGTAG, note.toString());
         fragmentManager.beginTransaction()
-                .replace(R.id.container, SimpleNoteFragment.newInstance(mNotes.get(position)))
+                .replace(R.id.container, SimpleNoteFragment.newInstance(note))
                 .commit();
     }
 
-    public void setUpView(String notebookGUID) {
-        mNotes.add(new SimpleNote("Dummy Note 1", "blah blah blah blah"));
-        mNotes.add(new SimpleNote("Dummy Note 2", "blah test blah"));
-        mNotes.add(new SimpleNote("Dummy Note 3", "Text dad"));
-
-        // After data has been retrieved, set up activity
-        setContentView(R.layout.activity_notes_home);
-
+    public void setUpNavigation(final String notebookGUID) {
         mNavigationDrawerFragment = (NavigationDrawerFragment)
                 getFragmentManager().findFragmentById(R.id.navigation_drawer);
-        mTitle = getTitle();
-
-        // Set up the drawer.
         mNavigationDrawerFragment.setUp(
                 R.id.navigation_drawer,
                 (DrawerLayout) findViewById(R.id.drawer_layout),
-                mNotes);
+                mNoteStoreClient, notebookGUID);
     }
 
     public void onSectionAttached(SimpleNote note) {
