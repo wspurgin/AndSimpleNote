@@ -5,26 +5,26 @@ import android.app.Activity;
 import android.app.ActionBar;
 import android.app.Fragment;
 import android.app.FragmentManager;
-import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
-import android.os.Build;
 import android.os.Bundle;
 import android.util.Log;
-import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
 import android.support.v4.widget.DrawerLayout;
-import android.widget.ArrayAdapter;
-import android.widget.TextView;
 
-import com.evernote.client.android.AuthenticationResult;
+import com.evernote.client.android.AsyncNoteStoreClient;
+import com.evernote.client.android.ClientFactory;
 import com.evernote.client.android.EvernoteSession;
+import com.evernote.client.android.OnClientCallback;
+import com.evernote.edam.type.Notebook;
+import com.evernote.thrift.transport.TTransportException;
 
 import java.util.ArrayList;
+import java.util.List;
 
 
 public class NotesHomeActivity extends Activity
@@ -35,11 +35,17 @@ public class NotesHomeActivity extends Activity
      */
     private NavigationDrawerFragment mNavigationDrawerFragment;
 
-    private ArrayList<SimpleNote> DUMMY_NOTES;
+    private ArrayList<SimpleNote> mNotes;
 
     private EvernoteSession mEvernoteSession;
 
     private static final String LOGTAG = "ASN-NotesHome";
+
+    private static final String APP_PREF = "AndSimpleNote-data";
+
+    private static final String PREF_GUID = "noteBookGUID";
+
+    private static final String NOTE_BOOK_NAME = "AndSimpleNoteBook";
 
     /**
      * Used to store the last screen title. For use in {@link #restoreActionBar()}.
@@ -49,27 +55,41 @@ public class NotesHomeActivity extends Activity
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_notes_home);
-        DUMMY_NOTES = new ArrayList<SimpleNote>();
-
-        mNavigationDrawerFragment = (NavigationDrawerFragment)
-                getFragmentManager().findFragmentById(R.id.navigation_drawer);
-        mTitle = getTitle();
-
+        mNotes = new ArrayList<SimpleNote>();
+        final SharedPreferences preferences = getSharedPreferences(APP_PREF, Activity.MODE_PRIVATE);
         mEvernoteSession = EvernoteSession.getInstance(this, EvernoteConsts.getConsumerKey(),
                 EvernoteConsts.getConsumerSecret(), EvernoteConsts.getEvernoteService());
-        if (!mEvernoteSession.isLoggedIn())
+        if (!mEvernoteSession.isLoggedIn()) {
             mEvernoteSession.authenticate(this);
+        }
+        ClientFactory clientFactory = mEvernoteSession.getClientFactory();
+        AsyncNoteStoreClient noteStoreClient;
+        try {
+            noteStoreClient = clientFactory.createNoteStoreClient();
+            if (!preferences.contains(PREF_GUID)) {
+                final Notebook notebook = new Notebook();
+                notebook.setName(NOTE_BOOK_NAME);
+                noteStoreClient.createNotebook(notebook, new OnClientCallback<Notebook>() {
+                    @Override
+                    public void onSuccess(Notebook data) {
+                        preferences.edit().putString(PREF_GUID, data.getGuid()).apply();
+                        notebook.setGuid(data.getGuid());
+                        Log.i(LOGTAG, notebook.toString());
+                        setUpView(notebook.getGuid());
+                    }
 
-        DUMMY_NOTES.add(new SimpleNote("Dummy Note 1", "blah blah blah blah"));
-        DUMMY_NOTES.add(new SimpleNote("Dummy Note 2", "blah test blah"));
-        DUMMY_NOTES.add(new SimpleNote("Dummy Note 3", "Text dad"));
+                    @Override
+                    public void onException(Exception exception) {
+                        Log.i(LOGTAG, exception.getMessage(), exception);
+                    }
+                });
+            } else {
+                setUpView(preferences.getString(PREF_GUID, ""));
+            }
 
-        // Set up the drawer.
-        mNavigationDrawerFragment.setUp(
-                R.id.navigation_drawer,
-                (DrawerLayout) findViewById(R.id.drawer_layout),
-                DUMMY_NOTES);
+        } catch (TTransportException e) {
+            Log.i(LOGTAG, e.getMessage(), e);
+        }
     }
 
     @Override
@@ -77,12 +97,31 @@ public class NotesHomeActivity extends Activity
         // update the main content by replacing fragments
         FragmentManager fragmentManager = getFragmentManager();
         fragmentManager.beginTransaction()
-                .replace(R.id.container, PlaceholderFragment.newInstance(position + 1))
+                .replace(R.id.container, SimpleNoteFragment.newInstance(mNotes.get(position)))
                 .commit();
     }
 
-    public void onSectionAttached(int number) {
-        mTitle = DUMMY_NOTES.get(number-1).getTitle();
+    public void setUpView(String notebookGUID) {
+        mNotes.add(new SimpleNote("Dummy Note 1", "blah blah blah blah"));
+        mNotes.add(new SimpleNote("Dummy Note 2", "blah test blah"));
+        mNotes.add(new SimpleNote("Dummy Note 3", "Text dad"));
+
+        // After data has been retrieved, set up activity
+        setContentView(R.layout.activity_notes_home);
+
+        mNavigationDrawerFragment = (NavigationDrawerFragment)
+                getFragmentManager().findFragmentById(R.id.navigation_drawer);
+        mTitle = getTitle();
+
+        // Set up the drawer.
+        mNavigationDrawerFragment.setUp(
+                R.id.navigation_drawer,
+                (DrawerLayout) findViewById(R.id.drawer_layout),
+                mNotes);
+    }
+
+    public void onSectionAttached(SimpleNote note) {
+        mTitle = note.getTitle();
     }
 
     public void restoreActionBar() {
@@ -138,26 +177,24 @@ public class NotesHomeActivity extends Activity
     /**
      * A placeholder fragment containing a simple view.
      */
-    public static class PlaceholderFragment extends Fragment {
-        /**
-         * The fragment argument representing the section number for this
-         * fragment.
-         */
-        private static final String ARG_SECTION_NUMBER = "section_number";
+    public static class SimpleNoteFragment extends Fragment {
+
+        private SimpleNote mNote;
 
         /**
          * Returns a new instance of this fragment for the given section
          * number.
          */
-        public static PlaceholderFragment newInstance(int sectionNumber) {
-            PlaceholderFragment fragment = new PlaceholderFragment();
+        public static SimpleNoteFragment newInstance(SimpleNote note) {
+            SimpleNoteFragment fragment = new SimpleNoteFragment();
+            fragment.mNote = note;
             Bundle args = new Bundle();
-            args.putInt(ARG_SECTION_NUMBER, sectionNumber);
+            args.putSerializable("note", fragment.mNote);
             fragment.setArguments(args);
             return fragment;
         }
 
-        public PlaceholderFragment() {
+        public SimpleNoteFragment() {
         }
 
         @Override
@@ -169,8 +206,8 @@ public class NotesHomeActivity extends Activity
         @Override
         public void onAttach(Activity activity) {
             super.onAttach(activity);
-            ((NotesHomeActivity) activity).onSectionAttached(
-                    getArguments().getInt(ARG_SECTION_NUMBER));
+            ((NotesHomeActivity) activity).onSectionAttached( (SimpleNote)
+                    getArguments().getSerializable("note"));
         }
     }
 
