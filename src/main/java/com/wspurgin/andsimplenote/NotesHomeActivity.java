@@ -5,11 +5,9 @@ import android.app.Activity;
 import android.app.ActionBar;
 import android.app.Fragment;
 import android.app.FragmentManager;
-import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.os.Bundle;
-import android.util.AttributeSet;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.Menu;
@@ -24,16 +22,12 @@ import com.evernote.client.android.ClientFactory;
 import com.evernote.client.android.EvernoteSession;
 import com.evernote.client.android.InvalidAuthenticationException;
 import com.evernote.client.android.OnClientCallback;
-import com.evernote.edam.limits.Constants;
-import com.evernote.edam.notestore.NoteFilter;
-import com.evernote.edam.notestore.NoteList;
-import com.evernote.edam.notestore.NotesMetadataResultSpec;
+import com.evernote.edam.error.EDAMUserException;
 import com.evernote.edam.type.Note;
 import com.evernote.edam.type.Notebook;
 import com.evernote.thrift.transport.TTransportException;
 
 import java.util.ArrayList;
-import java.util.List;
 
 
 public class NotesHomeActivity extends Activity
@@ -68,14 +62,19 @@ public class NotesHomeActivity extends Activity
         super.onCreate(savedInstanceState);
 
         // set up Evernote
-        final SharedPreferences preferences = getSharedPreferences(APP_PREF, Activity.MODE_PRIVATE);
         mEvernoteSession = EvernoteSession.getInstance(this, EvernoteConsts.getConsumerKey(),
                 EvernoteConsts.getConsumerSecret(), EvernoteConsts.getEvernoteService());
-        if (!mEvernoteSession.isLoggedIn()) {
+        if (!mEvernoteSession.isLoggedIn() || mEvernoteSession.getAuthenticationResult() == null) {
+            Log.i(LOGTAG, "Attempting login with evernote");
             mEvernoteSession.authenticate(this);
+        } else {
+            afterAuth();
         }
+    }
 
+    private void afterAuth() {
         // After authenticated, set up activity
+        final SharedPreferences preferences = getSharedPreferences(APP_PREF, Activity.MODE_PRIVATE);
         setContentView(R.layout.activity_notes_home);
         Log.i(LOGTAG, "Content view has been set");
         ClientFactory clientFactory = mEvernoteSession.getClientFactory();
@@ -101,8 +100,12 @@ public class NotesHomeActivity extends Activity
                 });
             } else {
                 Log.i(LOGTAG, "Notebook GUID detected in preferences");
+                mNavigationDrawerFragment = (NavigationDrawerFragment)
+                        getFragmentManager().findFragmentById(R.id.navigation_drawer);
                 setUpNavigation(preferences.getString(PREF_GUID, ""));
             }
+            if (mNavigationDrawerFragment == null )
+                mNavigationDrawerFragment = (NavigationDrawerFragment) getFragmentManager().findFragmentById(R.id.navigation_drawer);
 
         } catch (TTransportException e) {
             Log.i(LOGTAG, e.getMessage(), e);
@@ -130,8 +133,6 @@ public class NotesHomeActivity extends Activity
     }
 
     public void setUpNavigation(final String notebookGUID) {
-        mNavigationDrawerFragment = (NavigationDrawerFragment)
-                getFragmentManager().findFragmentById(R.id.navigation_drawer);
         mNavigationDrawerFragment.setUp(
                 R.id.navigation_drawer,
                 (DrawerLayout) findViewById(R.id.drawer_layout),
@@ -170,16 +171,9 @@ public class NotesHomeActivity extends Activity
         // as you specify a parent activity in AndroidManifest.xml.
         int id = item.getItemId();
 
-        if (id == R.id.action_logout) {
-            try {
-                mEvernoteSession.logOut(this);
-                return true;
-            } catch (InvalidAuthenticationException e) {
-                Log.w(LOGTAG, e.getMessage(), e);
-                return false;
-            }
-        } else if (id == R.id.action_login) {
-            mEvernoteSession.authenticate(this);
+        if (id == R.id.action_login) {
+            if (!mEvernoteSession.isLoggedIn())
+                mEvernoteSession.authenticate(this);
         }
 
         return super.onOptionsItemSelected(item);
@@ -194,6 +188,7 @@ public class NotesHomeActivity extends Activity
                 if (resultCode == Activity.RESULT_OK) {
                     // Authentication was successful, do what you need to do in your app
                     Log.i(LOGTAG, "Authenticated with Evernote");
+                    afterAuth();
                 }
                 break;
         }

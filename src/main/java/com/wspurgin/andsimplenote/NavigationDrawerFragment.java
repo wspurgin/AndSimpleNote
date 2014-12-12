@@ -422,14 +422,15 @@ public class NavigationDrawerFragment extends Fragment {
         return mAdapter.getItem(position);
     }
 
-    private void persistNoteWithEvernote(SimpleNote note) {
+    private void persistNoteWithEvernote(final SimpleNote note) {
         // send the note to Evernote
         Note everNote = NoteConverter.toEverNote(note);
         everNote.setNotebookGuid(mNotebookGUID);
         mNoteStoreClient.createNote(everNote, new OnClientCallback<Note>() {
             @Override
             public void onSuccess(Note data) {
-                Log.i(LOGTAG, "created first note");
+                Log.i(LOGTAG, "created note: " + data.getGuid());
+                note.setGuid(data.getGuid());
             }
 
             @Override
