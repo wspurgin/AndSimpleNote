@@ -14,11 +14,17 @@ import java.util.regex.Pattern;
  */
 public class NoteConverter {
 
+    private static final String LOGTAG = "ASN-NoteConverter";
+
+    private static final String noteOpenTag = "<en-note>";
+    private static final String noteCloseTag = "</en-note>";
+
     public static Note toEverNote(SimpleNote simpleNote) {
         String content = EvernoteUtil.NOTE_PREFIX + XHTMLify(simpleNote.getBody()) + EvernoteUtil.NOTE_SUFFIX;
         Note note = new Note();
         note.setTitle(simpleNote.getTitle());
         note.setContent(content);
+        note.setGuid(simpleNote.getGuid());
         return note;
     }
 
@@ -38,7 +44,14 @@ public class NoteConverter {
 
     public static String unXHTMLify(String xhtml) {
         String body = "";
-        Log.i("ASN-NoteConverter", xhtml.replaceAll("<div>(.*)</div>", "$1"));
+        String stripEverNoteTags = "(.+)" + noteOpenTag + "(.+)"+ noteCloseTag + "$";
+        Log.i(LOGTAG, stripEverNoteTags);
+        if (xhtml.matches(stripEverNoteTags))
+            xhtml = xhtml.replaceAll(stripEverNoteTags, "$2"); // strip off xml and en-note tags
+        else {
+            Log.i(LOGTAG, "No Evernote xml tags detected for xhtml");
+        }
+
         if (xhtml.matches("(?i)(<div.*?>)(.+?)(</div>)")) {
             body = xhtml.replaceAll("(?i)(<div.*?>)(.+?)(</div>)", "$2"+String.format("%n"));
         } else {
@@ -49,7 +62,8 @@ public class NoteConverter {
 
     public static SimpleNote toSimpleNote(Note everNote) {
         SimpleNote note = new SimpleNote();
-        note.setTitle(everNote.getTitle()); // the easy part
+        note.setTitle(everNote.getTitle()); // the easy parts
+        note.setGuid(everNote.getGuid());
 
         // Parse the contents to un-XHTMLify it.
         String body = unXHTMLify(everNote.getContent());

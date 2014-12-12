@@ -11,6 +11,7 @@ import java.io.Serializable;
 public class SimpleNote implements Serializable {
     private String mTitle;
     private String mBody;
+    private String guid;
 
     public SimpleNote() {}
 
@@ -46,5 +47,13 @@ public class SimpleNote implements Serializable {
 
     public String toString() {
         return this.mTitle;
+    }
+
+    public String getGuid() {
+        return guid;
+    }
+
+    public void setGuid(String guid) {
+        this.guid = guid;
     }
 }

@@ -17,10 +17,12 @@ import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
 import android.support.v4.widget.DrawerLayout;
+import android.widget.EditText;
 
 import com.evernote.client.android.AsyncNoteStoreClient;
 import com.evernote.client.android.ClientFactory;
 import com.evernote.client.android.EvernoteSession;
+import com.evernote.client.android.InvalidAuthenticationException;
 import com.evernote.client.android.OnClientCallback;
 import com.evernote.edam.limits.Constants;
 import com.evernote.edam.notestore.NoteFilter;
@@ -64,14 +66,16 @@ public class NotesHomeActivity extends Activity
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        mNotes = new ArrayList<SimpleNote>();
+
+        // set up Evernote
         final SharedPreferences preferences = getSharedPreferences(APP_PREF, Activity.MODE_PRIVATE);
         mEvernoteSession = EvernoteSession.getInstance(this, EvernoteConsts.getConsumerKey(),
                 EvernoteConsts.getConsumerSecret(), EvernoteConsts.getEvernoteService());
         if (!mEvernoteSession.isLoggedIn()) {
             mEvernoteSession.authenticate(this);
         }
-        // After data has been retrieved, set up activity
+
+        // After authenticated, set up activity
         setContentView(R.layout.activity_notes_home);
         Log.i(LOGTAG, "Content view has been set");
         ClientFactory clientFactory = mEvernoteSession.getClientFactory();
@@ -166,9 +170,16 @@ public class NotesHomeActivity extends Activity
         // as you specify a parent activity in AndroidManifest.xml.
         int id = item.getItemId();
 
-        //noinspection SimplifiableIfStatement
-        if (id == R.id.action_settings) {
-            return true;
+        if (id == R.id.action_logout) {
+            try {
+                mEvernoteSession.logOut(this);
+                return true;
+            } catch (InvalidAuthenticationException e) {
+                Log.w(LOGTAG, e.getMessage(), e);
+                return false;
+            }
+        } else if (id == R.id.action_login) {
+            mEvernoteSession.authenticate(this);
         }
 
         return super.onOptionsItemSelected(item);
@@ -195,6 +206,8 @@ public class NotesHomeActivity extends Activity
 
         private SimpleNote mNote;
 
+        private EditText mEditText;
+
         /**
          * Returns a new instance of this fragment for the given section
          * number.
@@ -214,7 +227,41 @@ public class NotesHomeActivity extends Activity
         @Override
         public View onCreateView(LayoutInflater inflater, ViewGroup container,
                                  Bundle savedInstanceState) {
-            return inflater.inflate(R.layout.fragment_notes_home, container, false);
+            View rootView = inflater.inflate(R.layout.fragment_notes_home, container, false);
+            mEditText = (EditText) rootView.findViewById(R.id.note_body);
+            if (mEditText != null) {
+                mEditText.setText(mNote.getBody());
+            }
+            return rootView;
+        }
+
+        @Override
+        public void onDestroy() {
+            mNote.setBody(mEditText.getText().toString()); // save state of body
+            saveNote();
+            super.onDestroy();
+        }
+
+        private void saveNote() {
+            EvernoteSession session = EvernoteSession.getInstance(this.getActivity(),
+                    EvernoteConsts.getConsumerKey(), EvernoteConsts.getConsumerSecret(),
+                    EvernoteConsts.getEvernoteService());
+            try {
+                session.getClientFactory().createNoteStoreClient().updateNote(NoteConverter.toEverNote(mNote),
+                        new OnClientCallback<Note>() {
+                            @Override
+                            public void onSuccess(Note data) {
+                                Log.i(LOGTAG, "Saved Note: " + mNote.getGuid());
+                            }
+
+                            @Override
+                            public void onException(Exception exception) {
+                                Log.w(LOGTAG, exception.getMessage(), exception);
+                            }
+                        });
+            } catch (TTransportException e) {
+                Log.w(LOGTAG, e.getMessage(), e);
+            }
         }
 
         @Override
