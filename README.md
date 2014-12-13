@@ -14,6 +14,9 @@ In addition, I want to make this app what everybody actually wants from a simple
 if you have a feature you would like or features you don't like (whether from this apps or from others), 
 feel free to post them on [the issues page](https://github.com/wspurgin/AndSimpleNote/issues) as well!
 
+Currently, the [Alpha](https://github.com/wspurgin/AndSimpleNote/releases/tag/v0.0.1-alpha) has been released!
+Download the apk and report any bugs to the issues page!
+
 I'll update this README as development continues. Thanks for any and all support!
 
 Cheers,
